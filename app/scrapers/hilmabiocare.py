@@ -1,5 +1,7 @@
+import asyncio
 import logging
 import re
+from functools import partial
 
 from app.scrapers.base import firecrawl
 
@@ -45,6 +47,19 @@ def clean_content(markdown: str) -> str:
     return markdown.strip()
 
 
+def _map_url_sync():
+    """Synchronous Firecrawl map call."""
+    return firecrawl.map_url(BASE_URL)
+
+
+def _scrape_url_sync(url):
+    """Synchronous Firecrawl scrape call."""
+    return firecrawl.scrape_url(url, params={
+        "formats": ["markdown"],
+        "waitFor": 3000,
+    })
+
+
 class HilmaBiocareScraper:
     """Scraper for hilmabiocare.com using Firecrawl."""
 
@@ -52,9 +67,11 @@ class HilmaBiocareScraper:
 
     async def scrape_all(self) -> list[dict]:
         """Discover and scrape all product pages."""
-        # Step 1: Use map to discover all product URLs (costs 1 credit)
+        loop = asyncio.get_event_loop()
+
+        # Step 1: Use map to discover all product URLs
         logger.info("Mapping hilmabiocare.com for product URLs...")
-        map_result = firecrawl.map_url(BASE_URL)
+        map_result = await loop.run_in_executor(None, _map_url_sync)
 
         if not map_result:
             logger.error("Failed to map hilmabiocare.com")
@@ -78,15 +95,12 @@ class HilmaBiocareScraper:
         product_urls = list(set(product_urls))
         logger.info(f"Found {len(product_urls)} product URLs")
 
-        # Step 2: Scrape each product page
+        # Step 2: Scrape each product page (non-blocking)
         products = []
         for i, url in enumerate(product_urls):
             logger.info(f"Scraping product {i + 1}/{len(product_urls)}: {url}")
             try:
-                result = firecrawl.scrape_url(url, params={
-                    "formats": ["markdown"],
-                    "waitFor": 3000,
-                })
+                result = await loop.run_in_executor(None, partial(_scrape_url_sync, url))
 
                 if result and result.get("markdown"):
                     metadata = result.get("metadata", {})

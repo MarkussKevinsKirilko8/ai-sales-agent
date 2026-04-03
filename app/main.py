@@ -1,7 +1,6 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from functools import partial
 
 import redis.asyncio as aioredis
 from fastapi import FastAPI
@@ -15,17 +14,13 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-async def scrape_in_thread(force: bool = False):
-    """Run scrapers in a separate thread so they don't block the bot."""
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, partial(asyncio.run, run_scrapers(force=force)))
-
-
 async def scrape_loop():
     """Run scrapers on startup and then every N hours."""
+    # Small delay to let the bot start first
+    await asyncio.sleep(5)
     while True:
         try:
-            count = await scrape_in_thread()
+            count = await run_scrapers()
             logger.info(f"Scrape complete: {count} products")
         except Exception as e:
             logger.error(f"Scrape failed: {e}")
@@ -66,5 +61,5 @@ async def health():
 @app.post("/scrape")
 async def trigger_scrape():
     """Manually trigger a rescrape of all sites."""
-    count = await scrape_in_thread(force=True)
+    count = await run_scrapers(force=True)
     return {"status": "ok", "products_scraped": count}
