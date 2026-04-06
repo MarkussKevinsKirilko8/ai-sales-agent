@@ -36,20 +36,12 @@ _claude = anthropic.AsyncAnthropic(api_key=settings.claude_api_key)
 
 
 def main_buttons() -> InlineKeyboardMarkup:
-    """Inline buttons for Shop and Manager — always visible on all platforms."""
+    """Inline buttons for Shop and Manager — always side by side."""
     return InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="🛒 Shop", web_app=WebAppInfo(url=SHOP_URL)),
             InlineKeyboardButton(text="👤 Manager", callback_data="request_manager"),
         ]
-    ])
-
-
-def shop_and_manager_buttons() -> InlineKeyboardMarkup:
-    """Inline buttons shown with product responses."""
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🛒 Open Shop", web_app=WebAppInfo(url=SHOP_URL))],
-        [InlineKeyboardButton(text="👤 Manager", callback_data="request_manager")],
     ])
 
 
@@ -145,8 +137,7 @@ async def send_response(message: types.Message, bot: Bot, response: AgentRespons
             except Exception:
                 pass
 
-    # Show shop+manager buttons when products mentioned, otherwise just main buttons
-    buttons = shop_and_manager_buttons() if response.show_shop_button else main_buttons()
+    buttons = main_buttons()
 
     await message.answer(
         formatted_text,
@@ -172,6 +163,9 @@ async def handle_start(message: types.Message) -> None:
 @router.callback_query(F.data == "request_manager")
 async def handle_manager_callback(callback: types.CallbackQuery, bot: Bot) -> None:
     """Handle Manager inline button press."""
+    if await is_manager_mode(callback.message.chat.id):
+        await callback.answer("Already connected to manager / Вы уже подключены к менеджеру")
+        return
     await callback.answer()
     await handle_manager_start(callback.message, bot)
 
