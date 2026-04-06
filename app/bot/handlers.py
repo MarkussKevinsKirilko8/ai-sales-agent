@@ -9,8 +9,6 @@ from aiogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     LinkPreviewOptions,
-    ReplyKeyboardMarkup,
-    KeyboardButton,
     WebAppInfo,
 )
 
@@ -37,31 +35,28 @@ SHOP_URL = "https://razvedka_rf_bot.miniapp-rf.app"
 _claude = anthropic.AsyncAnthropic(api_key=settings.claude_api_key)
 
 
-def main_keyboard() -> ReplyKeyboardMarkup:
-    """Main persistent keyboard with Shop and Manager buttons."""
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [
-                KeyboardButton(text="🛒 Shop", web_app=WebAppInfo(url=SHOP_URL)),
-                KeyboardButton(text="👤 Manager"),
-            ],
-        ],
-        resize_keyboard=True,
-        is_persistent=True,
-    )
-
-
-def manager_close_button() -> InlineKeyboardMarkup:
-    """Inline Close button for manager mode — attached to message, never disappears."""
+def main_buttons() -> InlineKeyboardMarkup:
+    """Inline buttons for Shop and Manager — always visible on all platforms."""
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="❌ Close Manager Chat", callback_data="close_manager")]
+        [
+            InlineKeyboardButton(text="🛒 Shop", web_app=WebAppInfo(url=SHOP_URL)),
+            InlineKeyboardButton(text="👤 Manager", callback_data="request_manager"),
+        ]
     ])
 
 
-def shop_inline_button() -> InlineKeyboardMarkup:
-    """Inline Shop button for product responses."""
+def shop_and_manager_buttons() -> InlineKeyboardMarkup:
+    """Inline buttons shown with product responses."""
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🛒 Open Shop", web_app=WebAppInfo(url=SHOP_URL))]
+        [InlineKeyboardButton(text="🛒 Open Shop", web_app=WebAppInfo(url=SHOP_URL))],
+        [InlineKeyboardButton(text="👤 Manager", callback_data="request_manager")],
+    ])
+
+
+def manager_close_button() -> InlineKeyboardMarkup:
+    """Inline Close button for manager mode."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Close Manager Chat", callback_data="close_manager")]
     ])
 
 
@@ -150,14 +145,14 @@ async def send_response(message: types.Message, bot: Bot, response: AgentRespons
             except Exception:
                 pass
 
-    # Add inline Shop button when relevant
-    inline = shop_inline_button() if response.show_shop_button else None
+    # Show shop+manager buttons when products mentioned, otherwise just main buttons
+    buttons = shop_and_manager_buttons() if response.show_shop_button else main_buttons()
 
     await message.answer(
         formatted_text,
         parse_mode="HTML",
         link_preview_options=LinkPreviewOptions(is_disabled=True),
-        reply_markup=inline or main_keyboard(),
+        reply_markup=buttons,
     )
 
 
@@ -170,29 +165,15 @@ async def handle_start(message: types.Message) -> None:
         "👋 Welcome! I'm the AI Sales Assistant for Hilma Biocare products.\n\n"
         "Ask me anything about products, availability, or pricing.\n"
         "Use the buttons below to open the Shop or contact a Manager.",
-        reply_markup=main_keyboard(),
+        reply_markup=main_buttons(),
     )
 
 
-@router.message(F.text == "👤 Manager")
-async def handle_manager_button(message: types.Message, bot: Bot) -> None:
-    """Handle Manager button press — direct trigger without Haiku."""
-    if message.chat.type in ("group", "supergroup"):
-        return
-    await handle_manager_start(message, bot)
-
-
-@router.message(F.text == "🛒 Shop")
-async def handle_shop_button(message: types.Message) -> None:
-    """Handle Shop button text fallback (web_app opens directly on supported clients)."""
-    if message.chat.type in ("group", "supergroup"):
-        return
-    await message.answer(
-        "🛒 Open the shop to browse products and place your order:",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🛒 Open Shop", web_app=WebAppInfo(url=SHOP_URL))]
-        ]),
-    )
+@router.callback_query(F.data == "request_manager")
+async def handle_manager_callback(callback: types.CallbackQuery, bot: Bot) -> None:
+    """Handle Manager inline button press."""
+    await callback.answer()
+    await handle_manager_start(callback.message, bot)
 
 
 @router.callback_query(F.data == "close_manager")
@@ -206,7 +187,7 @@ async def handle_close_manager(callback: types.CallbackQuery) -> None:
     await callback.message.answer(
         "Вы снова общаетесь с AI-ассистентом.\n\n"
         "You're now back with the AI assistant.",
-        reply_markup=main_keyboard(),
+        reply_markup=main_buttons(),
     )
 
 
