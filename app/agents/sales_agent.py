@@ -76,16 +76,18 @@ EXTRACT_PROMPT = """Extract the product name(s) from this user message. The user
 Return a JSON object with:
 - "products": list of product names mentioned (just the product names, no extra words)
 - "is_specific": true if the user is asking about ONE specific product, false if asking about multiple products or a general question
+- "wants_manager": true if the user wants to speak with a human manager/operator/support person, false otherwise
 
 Examples:
-- "Tell me about Testosterone Enanthate" → {"products": ["Testosterone Enanthate"], "is_specific": true}
-- "Could you show me these testosterone enanthate" → {"products": ["Testosterone Enanthate"], "is_specific": true}
-- "What testosterone products do you have?" → {"products": ["Testosterone"], "is_specific": false}
-- "Tell me about Testosterone and Clenbuterol" → {"products": ["Testosterone", "Clenbuterol"], "is_specific": false}
-- "Kādi peptīdu produkti jums ir pieejami?" → {"products": ["peptide"], "is_specific": false}
-- "Какие есть препараты для похудения?" → {"products": ["weight loss"], "is_specific": false}
-- "What is the dosage for Oxandrolone?" → {"products": ["Oxandrolone"], "is_specific": true}
-- "Hi, what can you help me with?" → {"products": [], "is_specific": false}
+- "Tell me about Testosterone Enanthate" → {"products": ["Testosterone Enanthate"], "is_specific": true, "wants_manager": false}
+- "What testosterone products do you have?" → {"products": ["Testosterone"], "is_specific": false, "wants_manager": false}
+- "менеджер" → {"products": [], "is_specific": false, "wants_manager": true}
+- "manager" → {"products": [], "is_specific": false, "wants_manager": true}
+- "can I talk to a person?" → {"products": [], "is_specific": false, "wants_manager": true}
+- "хочу поговорить с оператором" → {"products": [], "is_specific": false, "wants_manager": true}
+- "menager please" → {"products": [], "is_specific": false, "wants_manager": true}
+- "переведи на менеджера" → {"products": [], "is_specific": false, "wants_manager": true}
+- "Hi, what can you help me with?" → {"products": [], "is_specific": false, "wants_manager": false}
 
 Return ONLY the JSON, nothing else."""
 
@@ -97,10 +99,13 @@ class AgentResponse:
     text: str
     product_images: list[dict] = field(default_factory=list)
     show_shop_button: bool = False
+    wants_manager: bool = False
 
 
-async def extract_product_names(user_message: str, chat_history: list[dict] = None) -> tuple[list[str], bool]:
-    """Use Claude Haiku to extract product names and intent from user message."""
+async def extract_product_names(user_message: str, chat_history: list[dict] = None) -> tuple[list[str], bool, bool]:
+    """Use Claude Haiku to extract product names, intent, and manager request.
+    Returns (products, is_specific, wants_manager).
+    """
     try:
         # Include recent history so Haiku understands follow-up questions
         context = ""
@@ -109,7 +114,6 @@ async def extract_product_names(user_message: str, chat_history: list[dict] = No
             history_lines = []
             for msg in recent:
                 role = "User" if msg["role"] == "user" else "Assistant"
-                # Truncate long assistant messages
                 content = msg["content"][:500] if msg["role"] == "assistant" else msg["content"]
                 history_lines.append(f"{role}: {content}")
             context = "Recent conversation:\n" + "\n".join(history_lines) + "\n\n"
@@ -123,28 +127,35 @@ async def extract_product_names(user_message: str, chat_history: list[dict] = No
         )
 
         raw = response.content[0].text.strip()
-        # Strip markdown code blocks if present
         if raw.startswith("```"):
-            raw = raw.split("\n", 1)[-1]  # Remove first line (```json)
-            raw = raw.rsplit("```", 1)[0]  # Remove closing ```
+            raw = raw.split("\n", 1)[-1]
+            raw = raw.rsplit("```", 1)[0]
             raw = raw.strip()
 
         result = json.loads(raw)
-        logger.info(f"Extracted products: {result}")
-        return result.get("products", []), result.get("is_specific", False)
+        logger.info(f"Extracted: {result}")
+        return (
+            result.get("products", []),
+            result.get("is_specific", False),
+            result.get("wants_manager", False),
+        )
     except Exception as e:
         logger.error(f"Product extraction failed: {e}")
-        # Fallback: use the raw message words
         words = [w for w in user_message.lower().split() if len(w) > 3]
-        return words, False
+        return words, False, False
 
 
-async def find_relevant_products(user_message: str, chat_history: list[dict] = None) -> tuple[list, bool]:
-    """Find products relevant to the user's query using Claude for understanding."""
-    product_names, is_specific = await extract_product_names(user_message, chat_history)
+async def find_relevant_products(user_message: str, chat_history: list[dict] = None) -> tuple[list, bool, bool]:
+    """Find products relevant to the user's query using Claude for understanding.
+    Returns (products, is_specific, wants_manager).
+    """
+    product_names, is_specific, wants_manager = await extract_product_names(user_message, chat_history)
+
+    if wants_manager:
+        return [], False, True
 
     if not product_names:
-        return [], False
+        return [], False, False
 
     # Search for each product name
     all_results = []
@@ -171,12 +182,17 @@ async def find_relevant_products(user_message: str, chat_history: list[dict] = N
     if len(unique_products) > 2:
         is_specific = False
 
-    return unique_products, is_specific
+    return unique_products, is_specific, False
 
 
-async def build_product_context(user_message: str, chat_history: list[dict] = None) -> tuple[str, list[dict]]:
-    """Build context string and return matched product images."""
-    unique_products, is_specific = await find_relevant_products(user_message, chat_history)
+async def build_product_context(user_message: str, chat_history: list[dict] = None) -> tuple[str, list[dict], bool]:
+    """Build context string and return matched product images.
+    Returns (context, images, wants_manager).
+    """
+    unique_products, is_specific, wants_manager = await find_relevant_products(user_message, chat_history)
+
+    if wants_manager:
+        return "", [], True
 
     # Only show images for specific product queries (1-2 results)
     product_images = []
@@ -193,12 +209,12 @@ async def build_product_context(user_message: str, chat_history: list[dict] = No
     if not unique_products:
         all_products = await get_all_products()
         if not all_products:
-            return "\n[No products have been scraped yet. The database is empty.]", []
+            return "\n[No products have been scraped yet. The database is empty.]", [], False
 
         context_parts = ["\nFull product catalog (names only — ask for details on specific products):"]
         for product in all_products:
             context_parts.append(f"- {product.title} | {product.url}")
-        return "\n".join(context_parts), []
+        return "\n".join(context_parts), [], False
 
     # Send detailed info for relevant products (max 10)
     products_to_send = unique_products[:10]
@@ -214,13 +230,17 @@ async def build_product_context(user_message: str, chat_history: list[dict] = No
             f"{content}\n"
         )
 
-    return "\n".join(context_parts), product_images
+    return "\n".join(context_parts), product_images, False
 
 
 async def get_agent_response(user_message: str, chat_history: list[dict] = None) -> AgentResponse:
     """Get a response from the Claude agent for a user message."""
     try:
-        product_context, product_images = await build_product_context(user_message, chat_history)
+        product_context, product_images, wants_manager = await build_product_context(user_message, chat_history)
+
+        if wants_manager:
+            return AgentResponse(text="", wants_manager=True)
+
         system = SYSTEM_PROMPT + product_context
 
         # Build messages with conversation history

@@ -30,13 +30,6 @@ logger = logging.getLogger(__name__)
 # Shop URL — Telegram mini app
 SHOP_URL = "https://razvedka_rf_bot.miniapp-rf.app"
 
-# Manager trigger words
-MANAGER_TRIGGERS = {
-    "менеджер", "менеджера", "менеджеру", "менеджэр",
-    "manager", "menager", "menejer",
-    "оператор", "оператора", "operator",
-    "👤 manager",
-}
 
 # Claude client for summarization
 _claude = anthropic.AsyncAnthropic(api_key=settings.claude_api_key)
@@ -67,12 +60,6 @@ def shop_inline_button() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🛒 Open Shop", url=SHOP_URL)]
     ])
-
-
-def is_manager_request(text: str) -> bool:
-    """Check if the user wants to speak with a manager."""
-    cleaned = text.strip().lower()
-    return any(trigger in cleaned for trigger in MANAGER_TRIGGERS)
 
 
 async def summarize_conversation(history: list[dict]) -> str:
@@ -173,6 +160,14 @@ async def send_response(message: types.Message, bot: Bot, response: AgentRespons
     )
 
 
+@router.message(F.text == "👤 Manager")
+async def handle_manager_button(message: types.Message, bot: Bot) -> None:
+    """Handle Manager button press — direct trigger without Haiku."""
+    if message.chat.type in ("group", "supergroup"):
+        return
+    await handle_manager_start(message, bot)
+
+
 @router.message(F.text == "🛒 Shop")
 async def handle_shop_button(message: types.Message) -> None:
     """Handle Shop button press."""
@@ -245,11 +240,6 @@ async def handle_message(message: types.Message, bot: Bot) -> None:
     if message.chat.type in ("group", "supergroup"):
         return
 
-    # Manager request
-    if is_manager_request(message.text) or message.text.strip() == "👤 Manager":
-        await handle_manager_start(message, bot)
-        return
-
     # If in manager mode, don't process with AI — let CRM handle
     if await is_manager_mode(message.chat.id):
         await refresh_manager_mode(message.chat.id)
@@ -259,6 +249,11 @@ async def handle_message(message: types.Message, bot: Bot) -> None:
 
     history = await get_history(message.chat.id)
     response = await get_agent_response(message.text, chat_history=history)
+
+    # Haiku detected manager request
+    if response.wants_manager:
+        await handle_manager_start(message, bot)
+        return
 
     await add_message(message.chat.id, "user", message.text)
     await add_message(message.chat.id, "assistant", response.text)
