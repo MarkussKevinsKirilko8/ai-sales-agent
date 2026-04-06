@@ -9,9 +9,7 @@ from aiogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     LinkPreviewOptions,
-    ReplyKeyboardMarkup,
-    ReplyKeyboardRemove,
-    KeyboardButton,
+    MenuButtonWebApp,
     WebAppInfo,
 )
 
@@ -37,31 +35,35 @@ SHOP_URL = "https://razvedka_rf_bot.miniapp-rf.app"
 _claude = anthropic.AsyncAnthropic(api_key=settings.claude_api_key)
 
 
-def main_keyboard() -> ReplyKeyboardMarkup:
-    """Reply keyboard with Shop and Manager — pinned below chat input."""
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [
-                KeyboardButton(text="🛒 Shop", web_app=WebAppInfo(url=SHOP_URL)),
-                KeyboardButton(text="👤 Manager"),
-            ],
-        ],
-        resize_keyboard=True,
-        is_persistent=True,
-        input_field_placeholder="Ask about products...",
-    )
+def action_buttons() -> InlineKeyboardMarkup:
+    """Inline buttons — attached to every message, never disappear."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="🛒 Shop", web_app=WebAppInfo(url=SHOP_URL)),
+            InlineKeyboardButton(text="👤 Manager", callback_data="request_manager"),
+        ]
+    ])
 
 
-def manager_keyboard() -> ReplyKeyboardMarkup:
-    """Reply keyboard during manager mode — only Close button."""
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="❌ Close Manager Chat")],
-        ],
-        resize_keyboard=True,
-        is_persistent=True,
-        input_field_placeholder="Chatting with manager...",
-    )
+def close_button() -> InlineKeyboardMarkup:
+    """Close button for manager mode."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Close Manager Chat", callback_data="close_manager")]
+    ])
+
+
+async def setup_menu_button(bot: Bot):
+    """Set the permanent Menu button next to the text input to open Shop."""
+    try:
+        await bot.set_chat_menu_button(
+            menu_button=MenuButtonWebApp(
+                text="🛒 Shop",
+                web_app=WebAppInfo(url=SHOP_URL),
+            )
+        )
+        logger.info("Menu button set to Shop")
+    except Exception as e:
+        logger.error(f"Failed to set menu button: {e}")
 
 
 async def summarize_conversation(history: list[dict]) -> str:
@@ -126,15 +128,17 @@ async def handle_manager_start(message: types.Message, bot: Bot):
 
     await message.answer(
         "Переключаем вас на менеджера. График работы: Пн-Пт 09:00-18:00 МСК.\n"
-        "Ожидайте ответа менеджера. Чат автоматически вернётся к AI через 5 минут без активности.\n\n"
+        "Ожидайте ответа менеджера. Чат автоматически вернётся к AI через 5 минут без активности.\n"
+        "Напишите /close для завершения.\n\n"
         "Connecting you with a manager. Working hours: Mon-Fri 09:00-18:00 Moscow time.\n"
-        "Waiting for manager response. Chat will return to AI after 5 minutes of inactivity.",
-        reply_markup=manager_keyboard(),
+        "Waiting for manager response. Chat will return to AI after 5 minutes of inactivity.\n"
+        "Type /close to end.",
+        reply_markup=close_button(),
     )
 
 
 async def send_response(message: types.Message, bot: Bot, response: AgentResponse) -> None:
-    """Send the agent response with product images."""
+    """Send the agent response with product images and action buttons."""
     formatted_text = markdown_to_telegram_html(response.text)
 
     if response.product_images:
@@ -153,20 +157,26 @@ async def send_response(message: types.Message, bot: Bot, response: AgentRespons
         formatted_text,
         parse_mode="HTML",
         link_preview_options=LinkPreviewOptions(is_disabled=True),
-        reply_markup=main_keyboard(),
+        reply_markup=action_buttons(),
     )
 
 
 @router.message(CommandStart())
-async def handle_start(message: types.Message) -> None:
-    """Handle /start command — show welcome message and keyboard."""
+async def handle_start(message: types.Message, bot: Bot) -> None:
+    """Handle /start command — show welcome message and set up menu button."""
     if message.chat.type in ("group", "supergroup"):
         return
+
+    # Set up the permanent Shop menu button
+    await setup_menu_button(bot)
+
     await message.answer(
         "👋 Welcome! I'm the AI Sales Assistant for Hilma Biocare products.\n\n"
-        "Ask me anything about products, availability, or pricing.\n"
-        "Use the buttons below to open the Shop or contact a Manager.",
-        reply_markup=main_keyboard(),
+        "Ask me anything about products, availability, or pricing.\n\n"
+        "🛒 Use the <b>Shop</b> button (bottom left) to browse products\n"
+        "👤 Use the <b>Manager</b> button below to contact support",
+        parse_mode="HTML",
+        reply_markup=action_buttons(),
     )
 
 
@@ -178,34 +188,39 @@ async def handle_close_command(message: types.Message) -> None:
     if await is_manager_mode(message.chat.id):
         await disable_manager_mode(message.chat.id)
         await message.answer(
-            "Чат с менеджером завершён.\nManager chat closed.",
-            reply_markup=main_keyboard(),
+            "Чат с менеджером завершён. Вы снова общаетесь с AI-ассистентом.\n\n"
+            "Manager chat closed. You're now back with the AI assistant.",
+            reply_markup=action_buttons(),
         )
     else:
-        await message.answer("You're already chatting with the AI assistant.")
+        await message.answer(
+            "You're already chatting with the AI assistant.",
+            reply_markup=action_buttons(),
+        )
 
 
-@router.message(F.text == "👤 Manager")
-async def handle_manager_button(message: types.Message, bot: Bot) -> None:
-    """Handle Manager button press."""
-    if message.chat.type in ("group", "supergroup"):
+@router.callback_query(F.data == "request_manager")
+async def handle_manager_callback(callback: types.CallbackQuery, bot: Bot) -> None:
+    """Handle Manager inline button press."""
+    if await is_manager_mode(callback.message.chat.id):
+        await callback.answer("Already connected to manager / Вы уже подключены к менеджеру")
         return
-    if await is_manager_mode(message.chat.id):
-        await message.answer("Вы уже подключены к менеджеру. / Already connected to manager.")
-        return
-    await handle_manager_start(message, bot)
+    await callback.answer()
+    await handle_manager_start(callback.message, bot)
 
 
-@router.message(F.text == "❌ Close Manager Chat")
-async def handle_close_button(message: types.Message) -> None:
-    """Handle Close Manager Chat button press."""
-    if message.chat.type in ("group", "supergroup"):
-        return
-    await disable_manager_mode(message.chat.id)
-    await message.answer(
-        "Чат с менеджером завершён. Вы снова общаетесь с AI-ассистентом.\n\n"
-        "Manager chat closed. You're now back with the AI assistant.",
-        reply_markup=main_keyboard(),
+@router.callback_query(F.data == "close_manager")
+async def handle_close_manager(callback: types.CallbackQuery) -> None:
+    """Handle Close inline button — return to AI mode."""
+    await disable_manager_mode(callback.message.chat.id)
+    await callback.answer("Manager chat closed")
+    await callback.message.edit_text(
+        "Чат с менеджером завершён. / Manager chat closed."
+    )
+    await callback.message.answer(
+        "Вы снова общаетесь с AI-ассистентом.\n\n"
+        "You're now back with the AI assistant.",
+        reply_markup=action_buttons(),
     )
 
 
@@ -215,7 +230,6 @@ async def handle_voice(message: types.Message, bot: Bot) -> None:
     if message.chat.type in ("group", "supergroup"):
         return
 
-    # If in manager mode, don't process with AI
     if await is_manager_mode(message.chat.id):
         await refresh_manager_mode(message.chat.id)
         return
@@ -230,7 +244,7 @@ async def handle_voice(message: types.Message, bot: Bot) -> None:
     if not text:
         await message.answer(
             "Sorry, I couldn't understand the voice message. Please try again or send a text message.",
-            reply_markup=main_keyboard(),
+            reply_markup=action_buttons(),
         )
         return
 
@@ -251,11 +265,9 @@ async def handle_message(message: types.Message, bot: Bot) -> None:
     """Handle all incoming text messages."""
     logger.info(f"Message from chat_id={message.chat.id}, type={message.chat.type}")
 
-    # Ignore group messages
     if message.chat.type in ("group", "supergroup"):
         return
 
-    # If in manager mode, don't process with AI — let CRM handle
     if await is_manager_mode(message.chat.id):
         await refresh_manager_mode(message.chat.id)
         return
@@ -288,5 +300,5 @@ async def handle_other(message: types.Message) -> None:
 
     await message.answer(
         "Please send a text or voice message and I'll help you find information.",
-        reply_markup=main_keyboard(),
+        reply_markup=action_buttons(),
     )
