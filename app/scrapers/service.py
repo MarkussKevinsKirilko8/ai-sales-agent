@@ -4,8 +4,11 @@ from sqlalchemy import delete, func, select
 
 from app.database.models import ScrapedPage
 from app.database.session import async_session
-from app.scrapers.hilmabiocare import HilmaBiocareScraper
-from app.scrapers.hilmabiocareshop import HilmaBiocareShopScraper
+from app.scrapers.product_api import ProductAPIScraper
+
+# Firecrawl scrapers (kept as fallback, currently disabled)
+# from app.scrapers.hilmabiocare import HilmaBiocareScraper
+# from app.scrapers.hilmabiocareshop import HilmaBiocareShopScraper
 
 logger = logging.getLogger(__name__)
 
@@ -19,30 +22,30 @@ async def has_data() -> bool:
 
 
 async def run_scrapers(force: bool = False):
-    """Run all scrapers and store results in the database.
+    """Fetch products from the API and store in the database.
 
     Args:
-        force: If True, scrape even if data already exists.
+        force: If True, sync even if data already exists.
     """
     if not force and await has_data():
-        logger.info("Database already has product data — skipping scrape. Use POST /scrape to force.")
+        logger.info("Database already has product data — skipping sync. Use POST /scrape to force.")
         return 0
 
     all_products = []
 
-    # Scrape hilmabiocare.com
-    logger.info("Starting hilmabiocare.com scraper...")
-    scraper1 = HilmaBiocareScraper()
-    products1 = await scraper1.scrape_all()
-    all_products.extend(products1)
-    logger.info(f"hilmabiocare.com: {len(products1)} products scraped")
+    # Primary: Product API
+    logger.info("Fetching from product API...")
+    api_scraper = ProductAPIScraper()
+    api_products = await api_scraper.scrape_all()
+    all_products.extend(api_products)
+    logger.info(f"Product API: {len(api_products)} products fetched")
 
-    # Scrape hilmabiocareshop.com
-    logger.info("Starting hilmabiocareshop.com scraper...")
-    scraper2 = HilmaBiocareShopScraper()
-    products2 = await scraper2.scrape_all()
-    all_products.extend(products2)
-    logger.info(f"hilmabiocareshop.com: {len(products2)} products scraped")
+    # Fallback: Firecrawl scrapers (disabled)
+    # if not api_products:
+    #     logger.warning("API returned no products — falling back to Firecrawl")
+    #     scraper1 = HilmaBiocareScraper()
+    #     products1 = await scraper1.scrape_all()
+    #     all_products.extend(products1)
 
     # Store in database
     async with async_session() as session:

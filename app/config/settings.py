@@ -11,8 +11,12 @@ class Settings(BaseSettings):
     # OpenAI (Whisper)
     openai_api_key: str
 
-    # Firecrawl
-    firecrawl_api_key: str
+    # Firecrawl (fallback)
+    firecrawl_api_key: str = ""
+
+    # Product API
+    product_api_url: str = ""
+    product_api_token: str = ""
 
     # PostgreSQL
     postgres_user: str = "agent"
@@ -25,8 +29,8 @@ class Settings(BaseSettings):
     redis_host: str = "redis"
     redis_port: int = 6379
 
-    # Scraper schedule (hours between scrapes) — 168 = once per week
-    scrape_interval_hours: int = 168
+    # Sync schedule (hours between API syncs) — 6 = every 6 hours
+    scrape_interval_hours: int = 6
 
     @property
     def database_url(self) -> str:
