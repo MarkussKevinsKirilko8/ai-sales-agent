@@ -4,7 +4,7 @@ import logging
 import anthropic
 from aiogram import Bot, F, Router, types
 from aiogram.enums import ChatAction
-from aiogram.filters import CommandStart
+from aiogram.filters import Command, CommandStart
 from aiogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -114,9 +114,11 @@ async def handle_manager_start(message: types.Message, bot: Bot):
 
     await message.answer(
         "Переключаем вас на менеджера. График работы: Пн-Пт 09:00-18:00 МСК.\n"
-        "Ожидайте ответа менеджера. Чат автоматически вернётся к AI через 5 минут без активности.\n\n"
+        "Ожидайте ответа менеджера. Чат автоматически вернётся к AI через 5 минут без активности.\n"
+        "Для завершения напишите /close\n\n"
         "Connecting you with a manager. Working hours: Mon-Fri 09:00-18:00 Moscow time.\n"
-        "Waiting for manager response. Chat will return to AI after 5 minutes of inactivity.",
+        "Waiting for manager response. Chat will return to AI after 5 minutes of inactivity.\n"
+        "Type /close to end manager chat.",
         reply_markup=manager_close_button(),
     )
 
@@ -158,6 +160,21 @@ async def handle_start(message: types.Message) -> None:
         "Use the buttons below to open the Shop or contact a Manager.",
         reply_markup=main_buttons(),
     )
+
+
+@router.message(Command("close"))
+async def handle_close_command(message: types.Message) -> None:
+    """Handle /close command — return to AI mode from anywhere."""
+    if message.chat.type in ("group", "supergroup"):
+        return
+    if await is_manager_mode(message.chat.id):
+        await disable_manager_mode(message.chat.id)
+        await message.answer(
+            "Чат с менеджером завершён.\nManager chat closed.",
+            reply_markup=main_buttons(),
+        )
+    else:
+        await message.answer("You're already chatting with the AI assistant.")
 
 
 @router.callback_query(F.data == "request_manager")
