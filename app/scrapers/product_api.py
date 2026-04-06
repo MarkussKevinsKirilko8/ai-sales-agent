@@ -8,6 +8,59 @@ from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
+# Russian slang/alternative names from the product spreadsheet (Sheet 3)
+PRODUCT_ALIASES = {
+    "Boldenone Undecylenate": "болденон, болд, болдик",
+    "Drostanolone Enanthate": "дростанолон энантат, мастерон энантат, мастерон длинный, маст",
+    "Drostanolone Propionate": "дростанолон пропионат, мастерон пропионат, мастерон короткий, маст",
+    "Methenolone Enanthate": "метенолон энантат, примоболан, прима, примка",
+    "Nandrolone Decanoate": "нандролон деканоат, дека, дека-дюраболин",
+    "Nandrolone Phenylpropionate": "нандролон фенилпропионат, нпп, дека короткая",
+    "Parabolan": "тренболон гекса, параболан, трен длинный, треник",
+    "Sustanon": "сустанон, тесто микс, суст",
+    "Testosterone Enanthate": "тестостерон энантат, тесто энантат, тесто, тест",
+    "Testosterone Cypionate": "тестостерон ципионат, тесто ципионат, тесто, тест",
+    "Testosterone Propionate": "тестостерон пропионат, пропик, тест пропик",
+    "Trenbolone Acetate": "тренболон ацетат, трен ацетат, трен, трэн, треник",
+    "Trenbolone Enanthate": "тренболон энантат, трен энантат, трен, трэн",
+    "Trenbolone Mix": "тренболон микс, трен микс",
+    "Testosterone Undecanoate": "тестостерон ундеканоат, тесто ундеканоат",
+    "CutStack": "кат стак, стек для сушки, микс для сушки",
+    "Mesterolone": "местеролон, провирон, прови, провик",
+    "Methandienone": "метандиенон, метандростенолон, метан, меташка",
+    "Oxandrolone": "оксандролон, анавар",
+    "Oxymetholone": "оксиметолон, анаполон, окси",
+    "Stanozolol": "станозолол, винстрол, винни",
+    "Turinabol": "туринабол, турик",
+    "Halotestin": "галотестин, флуоксиместерон, гало",
+    "Primabolan": "примоболан таблетки, метенолон ацетат, примка",
+    "Exemestane 250": "эксеместан, ингибитор ароматазы",
+    "Letrozole 25": "летрозол, ингибитор ароматазы",
+    "Clomiphene Citrate": "кломифен, кломид",
+    "Tamoxifen Citrate": "тамоксифен, нолвадекс",
+    "Anastrozole": "анастрозол, ингибитор ароматазы",
+    "Cabergoline": "каберголин, достинекс",
+    "Clenbuterol": "кленбутерол, клен, жиросжигатель",
+    "T3": "трийодтиронин, лиотиронин, т3",
+    "T4": "тироксин, левотироксин, т4",
+    "Melanotan 2": "меланотан, пептид для загара",
+    "PEG MGF": "пег мгф, пептид роста мышц",
+    "GHRP-2": "гхрп 2, пептид гормона роста",
+    "GHRP-6": "гхрп 6, пептид гормона роста",
+    "Fragment 176-191": "фрагмент 176-191, пептид жиросжигания",
+    "CJC-1295 with DAC": "сджс 1295, пептид гормона роста",
+    "TB-500": "тб 500, тимозин бета, пептид восстановления",
+    "HCG Gonadotropin": "хгч, гонадотропин, хорионический гонадотропин",
+    "Viagr-ON": "силденафил, для потенции",
+    "Tadalafil C-20": "тадалафил, для потенции",
+    "HGH Liquid": "гормон роста жидкий, соматропин, гормонка, гр",
+    "HGH Powder": "гормон роста порошок, соматропин сухой, гормонка, гр",
+    "Bacteriostatic Water": "бактериостатическая вода, вода для инъекций, бак вода",
+    "Stanozolol Injection": "станозолол инъекционный, винстрол инъекционный, винни",
+    "Semaglutide": "семаглутид, пептид для похудения",
+    "Tirzepatide": "тирзепатид, пептид для похудения",
+}
+
 
 def _get_text(field, lang="en") -> str:
     """Extract text from a field that might be a dict (multilingual) or a string."""
@@ -146,6 +199,12 @@ def _build_product_content(product: dict) -> str:
     common = _get_all_langs(product.get("Common names", ""))
     if common:
         parts.append(f"\nCommon names: {common}")
+
+    # Add Russian aliases from spreadsheet
+    title_en = _get_text(product.get("title"), "en")
+    aliases = PRODUCT_ALIASES.get(title_en, "")
+    if aliases:
+        parts.append(f"\nAliases: {aliases}")
 
     return "\n".join(parts)
 

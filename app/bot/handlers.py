@@ -2,7 +2,7 @@ import io
 
 from aiogram import Bot, F, Router, types
 from aiogram.enums import ChatAction
-from aiogram.types import LinkPreviewOptions
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, LinkPreviewOptions
 
 from app.agents.sales_agent import AgentResponse, get_agent_response
 from app.services.chat_history import add_message, get_history
@@ -11,9 +11,27 @@ from app.services.voice import transcribe_voice
 
 router = Router()
 
+# Shop URL — Telegram mini app
+SHOP_URL = "https://razvedka_rf_bot.miniapp-rf.app"
+
+# Manager trigger words
+MANAGER_TRIGGERS = {"менеджер", "manager", "менеджера", "оператор", "operator"}
+
+
+def shop_keyboard() -> InlineKeyboardMarkup:
+    """Create an inline keyboard with the Shop button."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🛒 Shop", url=SHOP_URL)]
+    ])
+
+
+def is_manager_request(text: str) -> bool:
+    """Check if the user wants to speak with a manager."""
+    return text.strip().lower() in MANAGER_TRIGGERS
+
 
 async def send_response(message: types.Message, bot: Bot, response: AgentResponse) -> None:
-    """Send the agent response with product images paired with descriptions."""
+    """Send the agent response with product images and Shop button."""
     formatted_text = markdown_to_telegram_html(response.text)
 
     if response.product_images:
@@ -28,10 +46,14 @@ async def send_response(message: types.Message, bot: Bot, response: AgentRespons
             except Exception:
                 pass
 
+    # Add Shop button when the response mentions ordering/shopping
+    keyboard = shop_keyboard() if response.show_shop_button else None
+
     await message.answer(
         formatted_text,
         parse_mode="HTML",
         link_preview_options=LinkPreviewOptions(is_disabled=True),
+        reply_markup=keyboard,
     )
 
 
@@ -51,11 +73,9 @@ async def handle_voice(message: types.Message, bot: Bot) -> None:
 
     await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
 
-    # Get history and respond
     history = await get_history(message.chat.id)
     response = await get_agent_response(text, chat_history=history)
 
-    # Save to history
     await add_message(message.chat.id, "user", text)
     await add_message(message.chat.id, "assistant", response.text)
 
@@ -66,13 +86,20 @@ async def handle_voice(message: types.Message, bot: Bot) -> None:
 @router.message(F.text)
 async def handle_message(message: types.Message, bot: Bot) -> None:
     """Handle all incoming text messages."""
+    # Manager handoff
+    if is_manager_request(message.text):
+        await message.answer(
+            "Переключаем вас на менеджера. График работы: Пн-Пт 09:00-18:00 МСК.\n\n"
+            "Connecting you with a manager. Working hours: Mon-Fri 09:00-18:00 Moscow time."
+        )
+        # TODO: Forward to manager chat/group
+        return
+
     await bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
 
-    # Get history and respond
     history = await get_history(message.chat.id)
     response = await get_agent_response(message.text, chat_history=history)
 
-    # Save to history
     await add_message(message.chat.id, "user", message.text)
     await add_message(message.chat.id, "assistant", response.text)
 
