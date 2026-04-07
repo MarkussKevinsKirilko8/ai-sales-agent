@@ -63,3 +63,11 @@ async def trigger_scrape():
     """Manually trigger a rescrape of all sites."""
     count = await run_scrapers(force=True)
     return {"status": "ok", "products_scraped": count}
+
+
+@app.get("/api/manager-status")
+async def manager_status(chat_id: int):
+    """Check if a chat is in manager mode. Used by CRM to filter messages."""
+    from app.services.manager_mode import is_manager_mode
+    mode = await is_manager_mode(chat_id)
+    return {"chat_id": chat_id, "manager_mode": mode}
