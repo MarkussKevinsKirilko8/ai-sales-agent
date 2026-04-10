@@ -10,6 +10,7 @@ from aiogram.types import (
     InlineKeyboardMarkup,
     LinkPreviewOptions,
     MenuButtonDefault,
+    WebAppInfo,
 )
 
 from app.agents.sales_agent import AgentResponse, get_agent_response
@@ -36,7 +37,7 @@ _claude = anthropic.AsyncAnthropic(api_key=settings.claude_api_key)
 def action_buttons(strings: dict, shop_url: str = SHOP_URL) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text=strings["shop"], url=shop_url),
+            InlineKeyboardButton(text=strings["shop"], web_app=WebAppInfo(url=shop_url)),
             InlineKeyboardButton(text=strings["manager"], callback_data="request_manager"),
         ]
     ])
