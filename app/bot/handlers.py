@@ -95,7 +95,7 @@ def action_buttons(lang: str = "ru") -> InlineKeyboardMarkup:
     s = get_strings(lang)
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text=s["shop"], web_app=WebAppInfo(url=SHOP_URL)),
+            InlineKeyboardButton(text=s["shop"], url=SHOP_URL),
             InlineKeyboardButton(text=s["manager"], callback_data="request_manager"),
         ]
     ])
