@@ -187,7 +187,8 @@ async def handle_close_command(message: types.Message) -> None:
     if message.chat.type in ("group", "supergroup"):
         return
 
-    lang = await get_user_lang(message.chat.id, message.text or "")
+    # Don't detect from "/close" text — use chat history to determine language
+    lang = await get_user_lang(message.chat.id)
     strings = await get_strings(lang)
 
     if await is_manager_mode(message.chat.id):
