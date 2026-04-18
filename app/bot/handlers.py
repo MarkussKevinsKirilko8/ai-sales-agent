@@ -140,8 +140,6 @@ async def send_response(
                 await bot.send_photo(
                     chat_id=message.chat.id,
                     photo=product["image_url"],
-                    caption=f"<b>{product['title']}</b>",
-                    parse_mode="HTML",
                 )
             except Exception:
                 pass
