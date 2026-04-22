@@ -14,25 +14,30 @@ client = anthropic.AsyncAnthropic(api_key=settings.claude_api_key)
 
 
 async def _call_ollama(system: str, messages: list[dict], max_tokens: int = 1024) -> str:
-    """Call Ollama API for local LLM inference."""
-    # Build prompt from system + messages
-    prompt = f"System: {system}\n\n"
+    """Call Ollama API using /api/chat for better KV cache reuse."""
+    # Build chat messages format
+    chat_messages = [{"role": "system", "content": system}]
     for msg in messages:
-        role = "User" if msg["role"] == "user" else "Assistant"
-        prompt += f"{role}: {msg['content']}\n\n"
+        chat_messages.append({"role": msg["role"], "content": msg["content"]})
 
     async with httpx.AsyncClient(timeout=120.0) as http:
         response = await http.post(
-            f"{settings.ollama_url}/api/generate",
+            f"{settings.ollama_url}/api/chat",
             json={
                 "model": settings.ollama_model,
-                "prompt": prompt,
+                "messages": chat_messages,
                 "stream": False,
-                "options": {"num_predict": max_tokens},
+                "think": False,
+                "keep_alive": -1,
+                "options": {
+                    "num_predict": max_tokens,
+                    "num_ctx": 8192,
+                    "temperature": 0.3,
+                },
             },
         )
         response.raise_for_status()
-        return response.json().get("response", "")
+        return response.json().get("message", {}).get("content", "")
 
 
 async def _call_anthropic(system: str, messages: list[dict], model: str = "claude-sonnet-4-20250514", max_tokens: int = 1024) -> str:
