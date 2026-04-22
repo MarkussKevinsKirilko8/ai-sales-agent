@@ -126,12 +126,29 @@ async def handle_manager_start(message: types.Message, bot: Bot, lang: str = "Ru
     )
 
 
+ERROR_CAT_PATH = "/app/app/assets/error_cat.png"
+
+
 async def send_response(
     message: types.Message,
     bot: Bot,
     response: AgentResponse,
     lang: str = "Russian",
 ) -> None:
+    # Send sad cat on error
+    if response.is_error:
+        try:
+            from aiogram.types import FSInputFile
+            photo = FSInputFile(ERROR_CAT_PATH)
+            await bot.send_photo(
+                chat_id=message.chat.id,
+                photo=photo,
+                caption=response.text,
+            )
+        except Exception:
+            await message.answer(response.text)
+        return
+
     formatted_text = markdown_to_telegram_html(response.text)
 
     if response.product_images:

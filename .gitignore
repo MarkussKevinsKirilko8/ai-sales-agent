@@ -26,3 +26,4 @@ docker-compose.override.yml
 Thumbs.db
 *.xlsx
 *.png
+!app/assets/error_cat.png

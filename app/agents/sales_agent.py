@@ -172,6 +172,7 @@ class AgentResponse:
     product_images: list[dict] = field(default_factory=list)
     show_shop_button: bool = False
     wants_manager: bool = False
+    is_error: bool = False
 
 
 async def extract_product_names(user_message: str, chat_history: list[dict] = None) -> tuple[list[str], bool, bool]:
@@ -341,7 +342,8 @@ async def get_agent_response(user_message: str, chat_history: list[dict] = None)
         )
 
     except Exception as e:
-        logger.error(f"Claude API error: {e}")
+        logger.error(f"LLM API error: {e}")
         return AgentResponse(
-            text="Sorry, I'm having trouble processing your request right now. Please try again in a moment.",
+            text="Произошла ошибка при обработке запроса. Пожалуйста, попробуйте ещё раз.",
+            is_error=True,
         )
