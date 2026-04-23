@@ -309,6 +309,13 @@ async def handle_message(message: types.Message, bot: Bot) -> None:
         await handle_manager_start(message, bot, lang)
         return
 
+    # Check if LLM response triggers manager transfer (discount over 20K)
+    if "MANAGER_TRANSFER:" in response.text:
+        response.text = response.text.replace("MANAGER_TRANSFER: ", "").replace("MANAGER_TRANSFER:", "")
+        await message.answer(response.text)
+        await handle_manager_start(message, bot, lang)
+        return
+
     await add_message(message.chat.id, "user", message.text)
     await add_message(message.chat.id, "assistant", response.text)
 
