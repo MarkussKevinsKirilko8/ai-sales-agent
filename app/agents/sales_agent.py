@@ -10,7 +10,7 @@ from app.database.queries import search_products, search_products_exact
 
 logger = logging.getLogger(__name__)
 
-client = anthropic.AsyncAnthropic(api_key=settings.claude_api_key)
+client = anthropic.AsyncAnthropic(api_key=settings.claude_api_key) if settings.claude_api_key else None
 
 
 async def _call_ollama(system: str, messages: list[dict], max_tokens: int = 256,
@@ -59,8 +59,6 @@ async def call_llm(system: str, messages: list[dict], model: str = "claude-sonne
                     max_tokens: int = 1024, format: str | None = None) -> str:
     """Call the configured LLM provider. Haiku always routes to Anthropic."""
     # Haiku extraction always goes to Anthropic (cheap, fast, reliable JSON)
-    if model and "haiku" in model.lower():
-        return await _call_anthropic(system, messages, model, max_tokens)
     if settings.llm_provider == "ollama":
         return await _call_ollama(system, messages, max_tokens, format)
     return await _call_anthropic(system, messages, model, max_tokens)
