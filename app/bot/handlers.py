@@ -22,6 +22,7 @@ from app.services.manager_mode import (
     disable_manager_mode,
     is_manager_mode,
     refresh_manager_mode,
+    save_manager_summary,
 )
 from app.services.voice import transcribe_voice
 
@@ -106,6 +107,14 @@ async def handle_manager_start(message: types.Message, bot: Bot, lang: str = "Ru
         f"👤 Клиент: {user_info}\n"
         f"🆔 Chat ID: <code>{message.chat.id}</code>\n\n"
         f"📝 <b>Сводка:</b>\n{summary}"
+    )
+
+    # Save summary to Redis for CRM API access
+    await save_manager_summary(
+        chat_id=message.chat.id,
+        summary=summary,
+        user_name=user.full_name,
+        username=user.username,
     )
 
     try:
