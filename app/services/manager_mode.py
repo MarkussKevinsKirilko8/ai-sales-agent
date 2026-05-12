@@ -1,3 +1,4 @@
+import json
 import logging
 
 import redis.asyncio as aioredis
@@ -71,9 +72,8 @@ async def refresh_manager_mode(chat_id: int) -> int:
     return 0
 
 
-async def save_manager_summary(chat_id: int, summary: str, user_name: str, username: str | None):
-    """Save the manager handoff summary to Redis."""
-    import json
+async def save_manager_summary(chat_id: int, summary: str, user_name: str = "", username: str = ""):
+    """Save the handoff summary so the CRM can fetch it via the API."""
     r = await get_redis()
     payload = json.dumps({
         "summary": summary,
@@ -84,15 +84,17 @@ async def save_manager_summary(chat_id: int, summary: str, user_name: str, usern
 
 
 async def get_manager_summary(chat_id: int) -> dict | None:
-    """Get the manager handoff summary from Redis."""
-    import json
+    """Get the saved summary for the CRM."""
     r = await get_redis()
     raw = await r.get(_summary_key(chat_id))
     if not raw:
         return None
     try:
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8")
         return json.loads(raw)
-    except Exception:
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        logger.error(f"Failed to parse manager summary for {chat_id}: {e}")
         return None
 
 
