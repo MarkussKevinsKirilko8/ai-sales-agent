@@ -11,7 +11,8 @@ class Base(DeclarativeBase):
 class SeenUser(Base):
     __tablename__ = "seen_users"
 
-    chat_id = Column(BigInteger, primary_key=True)
+    telegram_user_id = Column(BigInteger, primary_key=True, autoincrement=False)
+    first_seen = Column(DateTime, default=datetime.utcnow)
 
 
 class ScrapedPage(Base):

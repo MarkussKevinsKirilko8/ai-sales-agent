@@ -1,4 +1,3 @@
-import asyncio
 import io
 import logging
 
@@ -25,9 +24,9 @@ from app.services.manager_mode import (
     refresh_manager_mode,
     save_manager_summary,
 )
-from app.services.seen_users import check_and_mark_seen
+from app.database.queries import mark_user_seen
+from app.services.bot_start_webhook import schedule_bot_start_notification
 from app.services.voice import transcribe_voice
-from app.services.webhook import notify_new_user
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -198,9 +197,8 @@ async def handle_start(message: types.Message, bot: Bot) -> None:
     if await is_manager_mode(message.chat.id):
         await disable_manager_mode(message.chat.id)
 
-    # Fire webhook for first-time users (non-blocking)
-    if await check_and_mark_seen(message.chat.id):
-        asyncio.create_task(notify_new_user(message.chat.id, message.from_user))
+    # Atomic first-time gate — must run BEFORE the reply
+    is_new_user = await mark_user_seen(message.from_user.id)
 
     # Remove the menu button next to chat input
     try:
@@ -214,6 +212,10 @@ async def handle_start(message: types.Message, bot: Bot) -> None:
         parse_mode="HTML",
         reply_markup=action_buttons(strings),
     )
+
+    # Fire the new-user webhook AFTER the reply, only for first-timers (non-blocking)
+    if is_new_user:
+        schedule_bot_start_notification(message.from_user)
 
 
 @router.message(Command("close"))
