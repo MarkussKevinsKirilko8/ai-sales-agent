@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     # Sync schedule (hours between API syncs) — 6 = every 6 hours
     scrape_interval_hours: int = 6
 
+    # New-user webhook (empty URL = disabled)
+    bot_start_webhook_url: str = ""
+    bot_start_webhook_secret: str = ""
+
     @property
     def database_url(self) -> str:
         return (

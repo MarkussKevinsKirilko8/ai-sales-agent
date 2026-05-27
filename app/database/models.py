@@ -1,11 +1,17 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Integer, String, Text
+from sqlalchemy import BigInteger, Column, DateTime, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase
 
 
 class Base(DeclarativeBase):
     pass
+
+
+class SeenUser(Base):
+    __tablename__ = "seen_users"
+
+    chat_id = Column(BigInteger, primary_key=True)
 
 
 class ScrapedPage(Base):
